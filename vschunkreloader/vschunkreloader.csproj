@@ -6,6 +6,12 @@
     <OutputPath>bin\$(Configuration)\Mods\mod</OutputPath>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <VintageStoryDir Condition="'$(VINTAGE_STORY)' != ''">$(VINTAGE_STORY)</VintageStoryDir>
+    <VintageStoryDir Condition="'$(VINTAGE_STORY)' == ''">Z:\00. Games\Vintagestory</VintageStoryDir>
+  </PropertyGroup>
 
   <ItemGroup>
     <Reference Include="VintagestoryAPI">

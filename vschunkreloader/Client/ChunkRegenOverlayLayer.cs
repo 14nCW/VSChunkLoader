@@ -400,9 +400,14 @@ namespace vschunkreloader.Client
         // będzie wołane z guzika "Execute"
         public void ExecuteSelection()
         {
+            if (clientSystem.selectedChunks.Count == 0)
+            {
+                capi.ShowChatMessage("[ChunkRegen] Brak zaznaczonych chunków.");
+                return;
+            }
+
             clientSystem.SendChunkReload();
         }
-
     }
 
 }

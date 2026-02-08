@@ -28,32 +28,8 @@ namespace VsChunkReloader
             base.StartServerSide(api);
             sapi = api;
 
-            //RegisterCommands();
             RegisterNetwork();
         }
-
-        //private void RegisterCommands()
-        //{
-        //    var parsers = sapi.ChatCommands.Parsers;
-
-        //    sapi.ChatCommands
-        //        .GetOrCreate("cregen")
-        //        .WithDescription("Narzędzia do regeneracji chunków (mod)")
-        //        .RequiresPrivilege(Privilege.controlserver)
-
-        //        // /cregen here
-        //        .BeginSubCommand("here")
-        //            .WithDescription("Regeneruje chunk, na którym stoisz")
-        //            .HandleWith(OnCmdRegenHere)
-        //        .EndSubCommand()
-
-        //        // /cregen area <radius>
-        //        .BeginSubCommand("area")
-        //            .WithDescription("Regeneruje kwadratowy obszar chunków wokół gracza")
-        //            .WithArgs(parsers.IntRange("radius", 0, 10))
-        //            .HandleWith(OnCmdRegenArea)
-        //        .EndSubCommand();
-        //}
 
         private void RegisterNetwork()
         {
@@ -72,65 +48,6 @@ namespace VsChunkReloader
 
             SimpleRegenChunks(packet.Coords, fromPlayer, packet.DeleteRegion);
         }
-
-        // /cregen here
-        private TextCommandResult OnCmdRegenHere(TextCommandCallingArgs args)
-        {
-            var player = args.Caller.Player as IServerPlayer;
-            if (player == null)
-            {
-                return TextCommandResult.Error("Tę komendę można użyć tylko jako gracz.");
-            }
-
-            var pos = player.Entity.Pos.AsBlockPos;
-
-            // Chunk coords – >> 5 zamiast / 32, żeby działało też dla ujemnych
-            int chunkX = pos.X >> 5;
-            int chunkZ = pos.Z >> 5;
-
-            var coords = new List<Vec2i> { new Vec2i(chunkX, chunkZ) };
-
-            SimpleRegenChunks(coords, player, deleteRegion: false);
-
-            return TextCommandResult.Success($"Regeneruję chunk ({chunkX}, {chunkZ}).");
-        }
-
-        // /cregen area <radius>
-        private TextCommandResult OnCmdRegenArea(TextCommandCallingArgs args)
-        {
-            var player = args.Caller.Player as IServerPlayer;
-            if (player == null)
-            {
-                return TextCommandResult.Error("Tę komendę można użyć tylko jako gracz.");
-            }
-
-            int radius = (int)args[0];
-
-            var pos = player.Entity.Pos.AsBlockPos;
-            int centerChunkX = pos.X >> 5;
-            int centerChunkZ = pos.Z >> 5;
-
-            var coords = new List<Vec2i>();
-
-            for (int dx = -radius; dx <= radius; dx++)
-            {
-                for (int dz = -radius; dz <= radius; dz++)
-                {
-                    coords.Add(new Vec2i(centerChunkX + dx, centerChunkZ + dz));
-                }
-            }
-
-            SimpleRegenChunks(coords, player, deleteRegion: false);
-
-            int diam = 2 * radius + 1;
-            return TextCommandResult.Success(
-                $"Regeneruję obszar {diam}x{diam} chunków wokół Ciebie (środek: {centerChunkX},{centerChunkZ})."
-            );
-        }
-
-        /// <summary>
-        /// Główna logika: usuń kolumny chunków, (opcjonalnie) regiony, wygeneruj na nowo, wyślij do gracza.
-        /// </summary>
         private void SimpleRegenChunks(List<Vec2i> coords, IServerPlayer player, bool deleteRegion)
         {
             if (coords == null || coords.Count == 0) return;
@@ -195,6 +112,7 @@ namespace VsChunkReloader
         private ICoreClientAPI capi;
         internal IClientNetworkChannel netChannel;
 
+
         public HashSet<Vec2i> selectedChunks = new HashSet<Vec2i>();
 
         public override void StartClientSide(ICoreClientAPI api)
@@ -212,53 +130,17 @@ namespace VsChunkReloader
             mapManager.RegisterMapLayer<ChunkRegenOverlayLayer>("chunkreloader", 0.5);
         }
 
-        private bool OnHotkeyRegenCurrent(KeyCombination comb)
-        {
-            var player = capi.World.Player;
-            if (player == null) return true;
-
-            var pos = player.Entity.Pos.AsBlockPos;
-            int chunkX = pos.X >> 5;
-            int chunkZ = pos.Z >> 5;
-
-            var packet = new ChunkRegenRequestPacket
-            {
-                Coords = new List<Vec2i> { new Vec2i(chunkX, chunkZ) },
-                DeleteRegion = false
-            };
-
-            netChannel.SendPacket(packet);
-
-            return true;
-        }
-
-        private bool OnHotkeyToggleChunk(KeyCombination comb)
-        {
-            var player = capi.World.Player;
-            if (player == null) return true;
-
-            var pos = player.Entity.Pos.AsBlockPos;
-            int chunkX = pos.X >> 5;
-            int chunkZ = pos.Z >> 5;
-
-            var c = new Vec2i(chunkX, chunkZ);
-
-            if (selectedChunks.Contains(c))
-            {
-                selectedChunks.Remove(c);
-            }
-            else
-            {
-                selectedChunks.Add(c);
-            }
-
-            return true;
-        }
-
         public bool SendChunkReload()
         {
             if (selectedChunks.Count == 0)
             {
+                capi.ShowChatMessage("[ChunkRegen] Brak zaznaczonych chunków.");
+                return true;
+            }
+
+            if (netChannel == null || !netChannel.Connected)
+            {
+                capi.ShowChatMessage("[ChunkRegen] Brak połączenia z serwerem (kanał nieaktywny).");
                 return true;
             }
 
@@ -267,18 +149,17 @@ namespace VsChunkReloader
             var packet = new ChunkRegenRequestPacket
             {
                 Coords = list,
-                DeleteRegion = false
+                DeleteRegion = true   // zawsze czyścimy mapę dla regionu
             };
 
             netChannel.SendPacket(packet);
             capi.ShowChatMessage($"[ChunkRegen] Sent {list.Count} chunks to regenerate.");
 
-            // Opcjonalnie wyczyść zaznaczenie po wysłaniu
+            // opcjonalnie: czyścić zaznaczenie po wysłaniu
             selectedChunks.Clear();
 
             return true;
         }
     }
-
 }
 

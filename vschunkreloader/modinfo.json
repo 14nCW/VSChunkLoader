@@ -9,6 +9,6 @@
     "description": "A mod that enables the Player to reload selected chunks if needed (for example if a new chunk generator is made on a newer version)",
     "version": "1.0.0",
     "dependencies": {
-        "game": "1.21.0-1.22.x"
+        "game": "1.21.0"
     }
 }

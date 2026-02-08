@@ -67,7 +67,6 @@ namespace vschunkreloader.Client
             boxStartTexture = new LoadedTexture(capi, 0, 1, 1);
             int[] purplePixels = { ColorUtil.ColorFromRgba(180, 0, 255, 180) };
             capi.Render.LoadOrUpdateTextureFromRgba(purplePixels, false, 0, ref boxStartTexture);
-
         }
 
         public override void Dispose()

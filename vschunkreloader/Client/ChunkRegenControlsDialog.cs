@@ -9,6 +9,7 @@ namespace vschunkreloader.Client
         private GuiElementDynamicText statusText;
 
 
+
         public override string ToggleKeyCombinationCode => "chunkreloadercontrols";
 
         public ChunkRegenControlsDialog(ICoreClientAPI capi, ChunkRegenOverlayLayer overlay)
@@ -36,7 +37,7 @@ namespace vschunkreloader.Client
             innerBounds.BothSizing = ElementSizing.Fixed;
 
             SingleComposer = capi.Gui
-                .CreateCompo("chunkreloader-controls", dialogBounds)
+                .CreateCompo("Chunk Reloader", dialogBounds)
                 .AddShadedDialogBG(bgBounds, true)              // pełne tło
                 .AddDialogTitleBar("Chunk Reloader", OnCloseClicked)
                 .BeginChildElements(innerBounds);

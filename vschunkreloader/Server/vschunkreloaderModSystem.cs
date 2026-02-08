@@ -28,37 +28,37 @@ namespace VsChunkReloader
             base.StartServerSide(api);
             sapi = api;
 
-            RegisterCommands();
+            //RegisterCommands();
             RegisterNetwork();
         }
 
-        private void RegisterCommands()
-        {
-            var parsers = sapi.ChatCommands.Parsers;
+        //private void RegisterCommands()
+        //{
+        //    var parsers = sapi.ChatCommands.Parsers;
 
-            sapi.ChatCommands
-                .GetOrCreate("cregen")
-                .WithDescription("Narzędzia do regeneracji chunków (mod)")
-                .RequiresPrivilege(Privilege.controlserver)
+        //    sapi.ChatCommands
+        //        .GetOrCreate("cregen")
+        //        .WithDescription("Narzędzia do regeneracji chunków (mod)")
+        //        .RequiresPrivilege(Privilege.controlserver)
 
-                // /cregen here
-                .BeginSubCommand("here")
-                    .WithDescription("Regeneruje chunk, na którym stoisz")
-                    .HandleWith(OnCmdRegenHere)
-                .EndSubCommand()
+        //        // /cregen here
+        //        .BeginSubCommand("here")
+        //            .WithDescription("Regeneruje chunk, na którym stoisz")
+        //            .HandleWith(OnCmdRegenHere)
+        //        .EndSubCommand()
 
-                // /cregen area <radius>
-                .BeginSubCommand("area")
-                    .WithDescription("Regeneruje kwadratowy obszar chunków wokół gracza")
-                    .WithArgs(parsers.IntRange("radius", 0, 10))
-                    .HandleWith(OnCmdRegenArea)
-                .EndSubCommand();
-        }
+        //        // /cregen area <radius>
+        //        .BeginSubCommand("area")
+        //            .WithDescription("Regeneruje kwadratowy obszar chunków wokół gracza")
+        //            .WithArgs(parsers.IntRange("radius", 0, 10))
+        //            .HandleWith(OnCmdRegenArea)
+        //        .EndSubCommand();
+        //}
 
         private void RegisterNetwork()
         {
             sapi.Network
-                .RegisterChannel("chunkregen")
+                .RegisterChannel("chunkreloader")
                 .RegisterMessageType<ChunkRegenRequestPacket>()
                 .SetMessageHandler<ChunkRegenRequestPacket>(OnChunkRegenRequest);
         }
@@ -203,20 +203,8 @@ namespace VsChunkReloader
             capi = api;
 
             netChannel = capi.Network
-                .RegisterChannel("chunkregen")
+                .RegisterChannel("chunkreloader")
                 .RegisterMessageType<ChunkRegenRequestPacket>();
-
-            // Już masz R → regen aktualnego chunka
-            api.Input.RegisterHotKey("chunkregen-current", "Regeneruj chunk pod graczem", GlKeys.R, HotkeyType.CharacterControls);
-            api.Input.SetHotKeyHandler("chunkregen-current", OnHotkeyRegenCurrent);
-
-            // Nowe: T → dodaj/usuń aktualny chunk do zaznaczenia
-            api.Input.RegisterHotKey("chunkregen-toggle", "Zaznacz/odznacz chunk pod graczem", GlKeys.U, HotkeyType.CharacterControls);
-            api.Input.SetHotKeyHandler("chunkregen-toggle", OnHotkeyToggleChunk);
-
-            // Nowe: Y → wyślij wszystkie zaznaczone chunki do regeneracji
-            //api.Input.RegisterHotKey("chunkregen-send", "Wyślij zaznaczone chunki do regeneracji", GlKeys.Y, HotkeyType.CharacterControls);
-            //api.Input.SetHotKeyHandler("chunkregen-send", SendChunkReload());
 
             var mapManager = api.ModLoader.GetModSystem<WorldMapManager>();
 

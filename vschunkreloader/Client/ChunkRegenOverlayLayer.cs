@@ -43,20 +43,10 @@ namespace vschunkreloader.Client
 
         private ChunkRegenControlsDialog controlsDialog;
 
-        //enum SelectionMode
-        //{
-        //    Single,
-        //    Box
-        //}
-
-        //enum EditMode
-        //{
-        //    Add,
-        //    Remove
-        //}
+        private bool lastActiveState = false;
 
 
-        public override string Title => "Chunk Reloader";
+        public override string Title => "chunkreloader";
         public override EnumMapAppSide DataSide => EnumMapAppSide.Client;
         public override string LayerGroupCode => "chunkreloader";
 
@@ -89,9 +79,6 @@ namespace vschunkreloader.Client
 
         public override void OnMapOpenedClient()
         {
-            // Wywoływane tylko dla WORLD MAPY, nie minimapy
-            // (tak samo jak w ProspectOverlayLayer)
-
             if (controlsDialog == null)
             {
                 controlsDialog = new ChunkRegenControlsDialog(capi, this);
@@ -111,20 +98,35 @@ namespace vschunkreloader.Client
             }
         }
 
-
-        //public override void OnMapClosedClient()
-        //{
-        //    // zamknij okienko, jeśli mapę zamknięto
-        //    if (controlsDialog != null && controlsDialog.IsOpened())
-        //    {
-        //        controlsDialog.TryClose();
-        //    }
-        //}
-
-
-
         public override void Render(GuiElementMap mapElem, float dt)
         {
+            if (Active != lastActiveState)
+            {
+                if (Active)
+                {
+                    // warstwa właśnie została WŁĄCZONA - otwieramy GUI
+                    if (controlsDialog == null)
+                    {
+                        controlsDialog = new ChunkRegenControlsDialog(capi, this);
+                    }
+
+                    if (!controlsDialog.IsOpened())
+                    {
+                        controlsDialog.TryOpen();
+                    }
+                }
+                else
+                {
+                    // warstwa została WYŁĄCZONA - zamykamy GUI
+                    if (controlsDialog != null && controlsDialog.IsOpened())
+                    {
+                        controlsDialog.TryClose();
+                    }
+                }
+
+                lastActiveState = Active;
+            }
+
             if (!Active) return;
 
             GetWorldBoundsForMap(mapElem, out Vec3d worldTopLeft, out Vec3d worldBottomRight);

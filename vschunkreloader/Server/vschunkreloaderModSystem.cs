@@ -215,8 +215,8 @@ namespace VsChunkReloader
             api.Input.SetHotKeyHandler("chunkregen-toggle", OnHotkeyToggleChunk);
 
             // Nowe: Y → wyślij wszystkie zaznaczone chunki do regeneracji
-            api.Input.RegisterHotKey("chunkregen-send", "Wyślij zaznaczone chunki do regeneracji", GlKeys.Y, HotkeyType.CharacterControls);
-            api.Input.SetHotKeyHandler("chunkregen-send", OnHotkeySendSelection);
+            //api.Input.RegisterHotKey("chunkregen-send", "Wyślij zaznaczone chunki do regeneracji", GlKeys.Y, HotkeyType.CharacterControls);
+            //api.Input.SetHotKeyHandler("chunkregen-send", SendChunkReload());
 
             var mapManager = api.ModLoader.GetModSystem<WorldMapManager>();
 
@@ -270,7 +270,7 @@ namespace VsChunkReloader
             return true;
         }
 
-        private bool OnHotkeySendSelection(KeyCombination comb)
+        public bool SendChunkReload()
         {
             if (selectedChunks.Count == 0)
             {

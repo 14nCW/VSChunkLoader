@@ -1,4 +1,5 @@
-﻿using Vintagestory.API.Client;
+﻿using System;
+using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
 using Vintagestory.GameContent;
@@ -6,25 +7,53 @@ using VsChunkReloader;
 
 namespace vschunkreloader.Client
 {
-    internal class ChunkRegenOverlayLayer : MapLayer
+    // tryb edycji – co robimy z chunkami
+    public enum ChunkRegenEditMode
+    {
+        None,
+        Add,
+        Remove
+    }
+
+    // tryb zaznaczania – jak interpretujemy kliknięcia
+    public enum ChunkRegenSelectionMode
+    {
+        None,
+        Single,
+        Box
+    }
+
+    public class ChunkRegenOverlayLayer : MapLayer
     {
         private readonly ICoreClientAPI capi;
         private readonly IWorldMapManager worldMapManager;
         private readonly ChunkRegenClientSystem clientSystem;
+
         private LoadedTexture debugTexture;
         private int chunkSize = 32;
-        private bool isBoxSelecting = false;
+
+        // === NOWE POLA STANU ===
+        private ChunkRegenEditMode editMode = ChunkRegenEditMode.None;
+        private ChunkRegenSelectionMode selectionMode = ChunkRegenSelectionMode.None;
+
+        private bool awaitingBoxEnd = false;
         private Vec2i boxStartChunk;
         private Vec2i boxCurrentChunk;
 
-        enum SelectionMode
-        {
-            Single,     // klik = toggle jednego chunka (to już masz)
-            Box,        // klik + przeciągnięcie = prostokąt
-            Brush       // „malowanie” chunków
-        }
+        private ChunkRegenControlsDialog controlsDialog;
 
-        private SelectionMode selectionMode = SelectionMode.Single;
+        //enum SelectionMode
+        //{
+        //    Single,
+        //    Box
+        //}
+
+        //enum EditMode
+        //{
+        //    Add,
+        //    Remove
+        //}
+
 
         public override string Title => "Chunk Reloader";
         public override EnumMapAppSide DataSide => EnumMapAppSide.Client;
@@ -36,11 +65,10 @@ namespace vschunkreloader.Client
             this.capi = (ICoreClientAPI)api;
             this.worldMapManager = mapSink;
 
-            // 🔥 TAK jak w ProspectTogether: bierzemy ModSystem z api.ModLoader
+            // ModSystem klientowy
             this.clientSystem = api.ModLoader.GetModSystem<ChunkRegenClientSystem>(true);
 
             debugTexture = new LoadedTexture(capi, 0, 1, 1);
-
             int[] pixels = { ColorUtil.ColorFromRgba(255, 0, 0, 120) }; // półprzezroczysty czerwony
             capi.Render.LoadOrUpdateTextureFromRgba(pixels, false, 0, ref debugTexture);
         }
@@ -54,71 +82,135 @@ namespace vschunkreloader.Client
         public override void OnMapOpenedClient()
         {
             if (!worldMapManager.IsOpened) return;
-            // na razie nic tu nie musisz robić
+
+            if (controlsDialog == null)
+            {
+                controlsDialog = new ChunkRegenControlsDialog(capi, this);
+            }
+
+            controlsDialog.TryOpen();
         }
+
 
         public override void Render(GuiElementMap mapElem, float dt)
         {
             if (!Active) return;
 
-            // 1. policz, jakie koordy świata są w rogach mapy
+            // policz, jakie koordy świata są w rogach mapy
             GetWorldBoundsForMap(mapElem, out Vec3d worldTopLeft, out Vec3d worldBottomRight);
 
-            // 2. narysuj overlay dla KAŻDEGO zaznaczonego chunka
+            // narysuj overlay dla KAŻDEGO zaznaczonego chunka
             foreach (var c in clientSystem.selectedChunks)
             {
                 DrawChunkOverlay(mapElem, worldTopLeft, worldBottomRight, c);
             }
+
+            // (opcjonalnie kiedyś: preview boxa – na razie pomijam, żeby nie mieszać)
         }
+
+        // ============================================================
+        // MOUSE INPUT
+        // ============================================================
 
         public override void OnMouseUpClient(MouseEvent args, GuiElementMap mapElem)
         {
             if (!Active) return;
             if (args.Button != EnumMouseButton.Left) return;
 
-            // 1. zamiana pozycji kliknięcia na worldX/worldZ
+            // dopóki użytkownik nie wybierze trybów – nic się nie dzieje
+            if (editMode == ChunkRegenEditMode.None || selectionMode == ChunkRegenSelectionMode.None)
+                return;
+
             int worldX, worldZ;
             if (!TryGetWorldPosFromMouse(mapElem, args, out worldX, out worldZ))
-            {
-                capi.ShowChatMessage($"chuj chuj chuj");
+                return;
 
-                return; // klik poza mapą
+            Vec2i chunk = new Vec2i(worldX >> 5, worldZ >> 5);
+
+            // === BOX MODE: dwa kliknięcia ===
+            if (selectionMode == ChunkRegenSelectionMode.Box)
+            {
+                if (!awaitingBoxEnd)
+                {
+                    boxStartChunk = chunk;
+                    awaitingBoxEnd = true;
+                    capi.ShowChatMessage($"[ChunkRegen] Box start: ({chunk.X},{chunk.Y})");
+                }
+                else
+                {
+                    boxCurrentChunk = chunk;
+                    awaitingBoxEnd = false;
+                    ApplyBoxSelection(boxStartChunk, boxCurrentChunk);
+                }
+
+                return;
             }
 
-            int chunkX = worldX >> 5;
-            int chunkZ = worldZ >> 5;
-            var c = new Vec2i(chunkX, chunkZ);
-            capi.ShowChatMessage($"mouse: {args.X},{args.Y}");
-
-            if (clientSystem.selectedChunks.Contains(c))
+            // === SINGLE MODE ===
+            if (selectionMode == ChunkRegenSelectionMode.Single)
             {
-                clientSystem.selectedChunks.Remove(c);
-                capi.ShowChatMessage($"[ChunkRegen] Odznaczono chunk ({chunkX},{chunkZ}). Zaznaczonych: {clientSystem.selectedChunks.Count}");
-            }
-            else
-            {
-                clientSystem.selectedChunks.Add(c);
-                capi.ShowChatMessage($"[ChunkRegen] Zaznaczono chunk ({chunkX},{chunkZ}). Zaznaczonych: {clientSystem.selectedChunks.Count}");
+                if (editMode == ChunkRegenEditMode.Add)
+                {
+                    clientSystem.selectedChunks.Add(chunk);
+                    capi.ShowChatMessage($"[ChunkRegen] ADD ({chunk.X},{chunk.Y})  total={clientSystem.selectedChunks.Count}");
+                }
+                else if (editMode == ChunkRegenEditMode.Remove)
+                {
+                    clientSystem.selectedChunks.Remove(chunk);
+                    capi.ShowChatMessage($"[ChunkRegen] REMOVE ({chunk.X},{chunk.Y})  total={clientSystem.selectedChunks.Count}");
+                }
             }
         }
+
+        // prostokąt: dodaj wszystkie chunki z boxStartChunk..boxCurrentChunk
+        private void ApplyBoxSelection(Vec2i a, Vec2i b)
+        {
+            int minX = Math.Min(a.X, b.X);
+            int maxX = Math.Max(a.X, b.X);
+            int minZ = Math.Min(a.Y, b.Y);
+            int maxZ = Math.Max(a.Y, b.Y);
+
+            for (int x = minX; x <= maxX; x++)
+            {
+                for (int z = minZ; z <= maxZ; z++)
+                {
+                    Vec2i c = new Vec2i(x, z);
+
+                    if (editMode == ChunkRegenEditMode.Add)
+                    {
+                        clientSystem.selectedChunks.Add(c);
+                    }
+                    else if (editMode == ChunkRegenEditMode.Remove)
+                    {
+                        clientSystem.selectedChunks.Remove(c);
+                    }
+                }
+            }
+
+            string op = editMode == ChunkRegenEditMode.Add ? "ADD" : "REMOVE";
+            capi.ShowChatMessage(
+                $"[ChunkRegen] {op} box {maxX - minX + 1} x {maxZ - minZ + 1}. total={clientSystem.selectedChunks.Count}"
+            );
+        }
+
+
+        // ============================================================
+        // KONWERSJE I RYSOWANIE (BEZ ZMIAN W LOGICE)
+        // ============================================================
 
         private bool TryGetWorldPosFromMouse(GuiElementMap mapElem, MouseEvent args, out int worldX, out int worldZ)
         {
             worldX = 0;
             worldZ = 0;
 
-            // 1. Pozycja myszy względem mapy (viewPos)
-            // MouseEvent.X/Y są w koordach ekranu, Bounds.absX/absY to pozycja mapy na ekranie
             float relX = (float)(args.X - mapElem.Bounds.absX);
             float relY = (float)(args.Y - mapElem.Bounds.absY);
 
-            // 2. Odrzucamy kliknięcia poza obszarem mapy
             if (relX < 0 || relY < 0 || relX > mapElem.Bounds.InnerWidth || relY > mapElem.Bounds.InnerHeight)
             {
                 return false;
             }
 
-            // 3. Konwersja viewPos -> worldPos
             Vec3d worldPos = new Vec3d();
             mapElem.TranslateViewPosToWorldPos(new Vec2f(relX, relY), ref worldPos);
 
@@ -127,15 +219,13 @@ namespace vschunkreloader.Client
             return true;
         }
 
-        private void DrawChunkOverlay(GuiElementMap mapElem, Vec3d worldTopLeft, Vec3d worldBottomRight, Vec2i chunkCoord
-)
+        private void DrawChunkOverlay(GuiElementMap mapElem, Vec3d worldTopLeft, Vec3d worldBottomRight, Vec2i chunkCoord)
         {
             int wx1 = chunkCoord.X * chunkSize;
             int wz1 = chunkCoord.Y * chunkSize;
             int wx2 = wx1 + chunkSize;
             int wz2 = wz1 + chunkSize;
 
-            // przeliczamy dwa rogi chunka na piksele na mapie
             if (!TryWorldToMapPixel(mapElem, worldTopLeft, worldBottomRight, wx1, wz1, out double x1, out double y1))
             {
                 return;
@@ -150,7 +240,6 @@ namespace vschunkreloader.Client
             double pw = x2 - x1;
             double ph = y2 - y1;
 
-            // proste zabezpieczenie przed „ujemną szerokością” gdy osie się odwrócą
             if (pw < 0)
             {
                 px += pw;
@@ -169,7 +258,6 @@ namespace vschunkreloader.Client
             );
         }
 
-
         private bool TryWorldToMapPixel(GuiElementMap mapElem, Vec3d topLeft, Vec3d bottomRight, float worldX, float worldZ, out double mapX, out double mapY)
         {
             mapX = mapY = 0;
@@ -187,11 +275,9 @@ namespace vschunkreloader.Client
                 return false;
             }
 
-            // pozycja w [0..1] w obrębie widoku mapy
             double nx = (worldX - worldMinX) / spanX;
             double nz = (worldZ - worldMinZ) / spanZ;
 
-            // można odfiltrować dalekie rzeczy (poza ekranem)
             if (nx < -0.2 || nx > 1.2 || nz < -0.2 || nz > 1.2)
             {
                 return false;
@@ -203,25 +289,113 @@ namespace vschunkreloader.Client
             return true;
         }
 
-
         private void GetWorldBoundsForMap(GuiElementMap mapElem, out Vec3d topLeft, out Vec3d bottomRight)
         {
             topLeft = new Vec3d();
             bottomRight = new Vec3d();
 
-            // (0,0) – lewy górny róg mapy (w lokalnych view coords)
             mapElem.TranslateViewPosToWorldPos(
                 new Vec2f(0, 0),
                 ref topLeft
             );
 
-            // (InnerWidth, InnerHeight) – prawy dolny róg mapy
             mapElem.TranslateViewPosToWorldPos(
                 new Vec2f((float)mapElem.Bounds.InnerWidth, (float)mapElem.Bounds.InnerHeight),
                 ref bottomRight
             );
         }
 
+        public override void ComposeDialogExtras(GuiDialogWorldMap mapDialog, GuiComposer compo)
+        {
+            // Proste, sztywne pozycje obok siebie pod mapą
+            // (0,0) - możesz później skorygować gdzie dokładnie mają być
+            ElementBounds addBounds = ElementBounds.Fixed(0, 0, 80, 25);
+            ElementBounds removeBounds = ElementBounds.Fixed(85, 0, 80, 25);
+            ElementBounds execBounds = ElementBounds.Fixed(170, 0, 80, 25);
+
+            compo.AddSmallButton(
+                "ADD",
+                () =>
+                {
+                    editMode = ChunkRegenEditMode.Add;
+                    capi.ShowChatMessage("[ChunkRegen] Mode: ADD");
+                    return true;
+                },
+                addBounds
+            );
+
+            compo.AddSmallButton(
+                "REMOVE",
+                () =>
+                {
+                    editMode = ChunkRegenEditMode.Remove;
+                    capi.ShowChatMessage("[ChunkRegen] Mode: REMOVE");
+                    return true;
+                },
+                removeBounds
+            );
+
+            compo.AddSmallButton(
+                "EXECUTE",
+                () =>
+                {
+                    ExecuteSelection();
+                    return true;
+                },
+                execBounds
+            );
+        }
+
+        //private void ExecuteSelection()
+        //{
+        //    capi.ShowChatMessage(
+        //        $"[ChunkRegen] Execute on {clientSystem.selectedChunks.Count} selected chunks."
+        //    );
+
+        //    // TODO: tutaj wywołaj swoją logikę wysłania selectedChunks do serwera / regen itp.
+        //}
+
+
+
+
+        public ChunkRegenEditMode CurrentEditMode => editMode;
+        public ChunkRegenSelectionMode CurrentSelectionMode => selectionMode;
+
+        public void SetEditMode(ChunkRegenEditMode mode)
+        {
+            editMode = mode;
+            // przy zmianie trybu edycji kasujemy niedokończonego boxa
+            if (selectionMode != ChunkRegenSelectionMode.Box)
+            {
+                awaitingBoxEnd = false;
+            }
+        }
+
+        public void SetSelectionMode(ChunkRegenSelectionMode mode)
+        {
+            selectionMode = mode;
+            // przy zmianie trybu selekcji kasujemy niedokończonego boxa
+            if (selectionMode != ChunkRegenSelectionMode.Box)
+            {
+                awaitingBoxEnd = false;
+            }
+        }
+
+        // będzie wołane z guzika "Execute"
+        public void ExecuteSelection()
+        {
+            //int count = clientSystem.selectedChunks.Count;
+            //if (count == 0)
+            //{
+            //    capi.ShowChatMessage("[ChunkRegen] No chunks selected.");
+            //    return;
+            //}
+
+            //capi.ShowChatMessage($"[ChunkRegen] EXECUTE on {count} chunks (tu wstaw regen).");
+
+            clientSystem.SendChunkReload();
+        }
 
     }
+
 }

@@ -81,32 +81,55 @@ namespace vschunkreloader.Client
 
         public override void OnMapOpenedClient()
         {
-            if (!worldMapManager.IsOpened) return;
+            // Wywoływane tylko dla WORLD MAPY, nie minimapy
+            // (tak samo jak w ProspectOverlayLayer)
 
             if (controlsDialog == null)
             {
                 controlsDialog = new ChunkRegenControlsDialog(capi, this);
             }
 
-            controlsDialog.TryOpen();
+            if (!controlsDialog.IsOpened())
+            {
+                controlsDialog.TryOpen();
+            }
         }
+
+        public override void OnMapClosedClient()
+        {
+            if (controlsDialog != null && controlsDialog.IsOpened())
+            {
+                controlsDialog.TryClose();
+            }
+        }
+
+
+        //public override void OnMapClosedClient()
+        //{
+        //    // zamknij okienko, jeśli mapę zamknięto
+        //    if (controlsDialog != null && controlsDialog.IsOpened())
+        //    {
+        //        controlsDialog.TryClose();
+        //    }
+        //}
+
 
 
         public override void Render(GuiElementMap mapElem, float dt)
         {
+            // --- dalej Twoje aktualne Render() ---
             if (!Active) return;
 
-            // policz, jakie koordy świata są w rogach mapy
             GetWorldBoundsForMap(mapElem, out Vec3d worldTopLeft, out Vec3d worldBottomRight);
 
-            // narysuj overlay dla KAŻDEGO zaznaczonego chunka
             foreach (var c in clientSystem.selectedChunks)
             {
                 DrawChunkOverlay(mapElem, worldTopLeft, worldBottomRight, c);
             }
 
-            // (opcjonalnie kiedyś: preview boxa – na razie pomijam, żeby nie mieszać)
+            // jeżeli masz podgląd boxa – zostaw
         }
+
 
         // ============================================================
         // MOUSE INPUT
@@ -192,7 +215,6 @@ namespace vschunkreloader.Client
                 $"[ChunkRegen] {op} box {maxX - minX + 1} x {maxZ - minZ + 1}. total={clientSystem.selectedChunks.Count}"
             );
         }
-
 
         // ============================================================
         // KONWERSJE I RYSOWANIE (BEZ ZMIAN W LOGICE)
@@ -305,59 +327,6 @@ namespace vschunkreloader.Client
             );
         }
 
-        public override void ComposeDialogExtras(GuiDialogWorldMap mapDialog, GuiComposer compo)
-        {
-            // Proste, sztywne pozycje obok siebie pod mapą
-            // (0,0) - możesz później skorygować gdzie dokładnie mają być
-            ElementBounds addBounds = ElementBounds.Fixed(0, 0, 80, 25);
-            ElementBounds removeBounds = ElementBounds.Fixed(85, 0, 80, 25);
-            ElementBounds execBounds = ElementBounds.Fixed(170, 0, 80, 25);
-
-            compo.AddSmallButton(
-                "ADD",
-                () =>
-                {
-                    editMode = ChunkRegenEditMode.Add;
-                    capi.ShowChatMessage("[ChunkRegen] Mode: ADD");
-                    return true;
-                },
-                addBounds
-            );
-
-            compo.AddSmallButton(
-                "REMOVE",
-                () =>
-                {
-                    editMode = ChunkRegenEditMode.Remove;
-                    capi.ShowChatMessage("[ChunkRegen] Mode: REMOVE");
-                    return true;
-                },
-                removeBounds
-            );
-
-            compo.AddSmallButton(
-                "EXECUTE",
-                () =>
-                {
-                    ExecuteSelection();
-                    return true;
-                },
-                execBounds
-            );
-        }
-
-        //private void ExecuteSelection()
-        //{
-        //    capi.ShowChatMessage(
-        //        $"[ChunkRegen] Execute on {clientSystem.selectedChunks.Count} selected chunks."
-        //    );
-
-        //    // TODO: tutaj wywołaj swoją logikę wysłania selectedChunks do serwera / regen itp.
-        //}
-
-
-
-
         public ChunkRegenEditMode CurrentEditMode => editMode;
         public ChunkRegenSelectionMode CurrentSelectionMode => selectionMode;
 
@@ -384,15 +353,6 @@ namespace vschunkreloader.Client
         // będzie wołane z guzika "Execute"
         public void ExecuteSelection()
         {
-            //int count = clientSystem.selectedChunks.Count;
-            //if (count == 0)
-            //{
-            //    capi.ShowChatMessage("[ChunkRegen] No chunks selected.");
-            //    return;
-            //}
-
-            //capi.ShowChatMessage($"[ChunkRegen] EXECUTE on {count} chunks (tu wstaw regen).");
-
             clientSystem.SendChunkReload();
         }
 

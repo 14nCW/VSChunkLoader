@@ -6,6 +6,8 @@ namespace vschunkreloader.Client
     {
         private readonly ICoreClientAPI capi;
         private readonly ChunkRegenOverlayLayer overlay;
+        private GuiElementDynamicText statusText;
+
 
         public override string ToggleKeyCombinationCode => "chunkreloadercontrols";
 
@@ -21,18 +23,23 @@ namespace vschunkreloader.Client
         private void Compose()
         {
             // małe okienko, pozycję możesz potem poprawić
-            ElementBounds dialogBounds = ElementBounds.Fixed(50, 80, 190, 140);
+            ElementBounds statusBounds = ElementBounds.Fixed(10, 120, 170, 20);
+            ElementBounds dialogBounds = ElementBounds.Fixed(50, 80, 210, 170);
 
-            ElementBounds bgBounds = ElementBounds.Fill
+            // Tło na całe okienko
+            ElementBounds bgBounds = ElementBounds.Fill;
+
+            // Wnętrze z paddingiem
+            ElementBounds innerBounds = ElementBounds.Fill
                 .WithFixedPadding(GuiStyle.ElementToDialogPadding)
                 .FixedGrow(0, 0);
-
-            bgBounds.BothSizing = ElementSizing.Fixed;
+            innerBounds.BothSizing = ElementSizing.Fixed;
 
             SingleComposer = capi.Gui
                 .CreateCompo("chunkreloader-controls", dialogBounds)
+                .AddShadedDialogBG(bgBounds, true)              // pełne tło
                 .AddDialogTitleBar("Chunk Reloader", OnCloseClicked)
-                .BeginChildElements(bgBounds);
+                .BeginChildElements(innerBounds);
 
             ElementBounds addBounds = ElementBounds.Fixed(10, 25, 80, 25);
             ElementBounds removeBounds = ElementBounds.Fixed(100, 25, 80, 25);
@@ -45,10 +52,38 @@ namespace vschunkreloader.Client
                 .AddSmallButton("Remove", OnRemoveClicked, removeBounds)
                 .AddSmallButton("Single", OnSingleClicked, singleBounds)
                 .AddSmallButton("Box", OnBoxClicked, boxBounds)
-                .AddSmallButton("Execute", OnExecuteClicked, execBounds);
+                .AddSmallButton("Execute", OnExecuteClicked, execBounds)
+                .AddDynamicText("Mode: (disabled)", CairoFont.WhiteDetailText(), statusBounds, "modeStatus");
 
             SingleComposer.EndChildElements().Compose();
+
+            // zapamiętujemy referencję do labela
+            statusText = SingleComposer.GetDynamicText("modeStatus");
+            UpdateStatusText();
         }
+
+        private void UpdateStatusText()
+        {
+            if (statusText == null) return;
+
+            string edit = overlay.CurrentEditMode.ToString();        // None/Add/Remove
+            string sel = overlay.CurrentSelectionMode.ToString();   // None/Single/Box
+
+            string text;
+
+            if (overlay.CurrentEditMode == ChunkRegenEditMode.None ||
+                overlay.CurrentSelectionMode == ChunkRegenSelectionMode.None)
+            {
+                text = "Mode: (disabled)";
+            }
+            else
+            {
+                text = $"Mode: {edit} + {sel}";
+            }
+
+            statusText.SetNewText(text);
+        }
+
 
         private void OnCloseClicked()
         {
@@ -57,14 +92,13 @@ namespace vschunkreloader.Client
 
         private bool OnAddClicked()
         {
-            // toggle Add / None
             overlay.SetEditMode(
                 overlay.CurrentEditMode == ChunkRegenEditMode.Add
                     ? ChunkRegenEditMode.None
                     : ChunkRegenEditMode.Add
             );
 
-            capi.ShowChatMessage($"[ChunkRegen] EditMode = {overlay.CurrentEditMode}");
+            UpdateStatusText();
             return true;
         }
 
@@ -76,7 +110,7 @@ namespace vschunkreloader.Client
                     : ChunkRegenEditMode.Remove
             );
 
-            capi.ShowChatMessage($"[ChunkRegen] EditMode = {overlay.CurrentEditMode}");
+            UpdateStatusText();
             return true;
         }
 
@@ -88,7 +122,7 @@ namespace vschunkreloader.Client
                     : ChunkRegenSelectionMode.Single
             );
 
-            capi.ShowChatMessage($"[ChunkRegen] SelectionMode = {overlay.CurrentSelectionMode}");
+            UpdateStatusText();
             return true;
         }
 
@@ -100,9 +134,10 @@ namespace vschunkreloader.Client
                     : ChunkRegenSelectionMode.Box
             );
 
-            capi.ShowChatMessage($"[ChunkRegen] SelectionMode = {overlay.CurrentSelectionMode}");
+            UpdateStatusText();
             return true;
         }
+
 
         private bool OnExecuteClicked()
         {

@@ -29,7 +29,8 @@ namespace vschunkreloader.Client
         private readonly IWorldMapManager worldMapManager;
         private readonly ChunkRegenClientSystem clientSystem;
 
-        private LoadedTexture debugTexture;
+        private LoadedTexture debugTexture;       // czerwony
+        private LoadedTexture boxStartTexture;    // fioletowy
         private int chunkSize = 32;
 
         // === NOWE POLA STANU ===
@@ -69,13 +70,20 @@ namespace vschunkreloader.Client
             this.clientSystem = api.ModLoader.GetModSystem<ChunkRegenClientSystem>(true);
 
             debugTexture = new LoadedTexture(capi, 0, 1, 1);
-            int[] pixels = { ColorUtil.ColorFromRgba(255, 0, 0, 120) }; // półprzezroczysty czerwony
-            capi.Render.LoadOrUpdateTextureFromRgba(pixels, false, 0, ref debugTexture);
+            int[] redPixels = { ColorUtil.ColorFromRgba(255, 0, 0, 120) };
+            capi.Render.LoadOrUpdateTextureFromRgba(redPixels, false, 0, ref debugTexture);
+
+            // Fioletowy – start boxa
+            boxStartTexture = new LoadedTexture(capi, 0, 1, 1);
+            int[] purplePixels = { ColorUtil.ColorFromRgba(180, 0, 255, 180) };
+            capi.Render.LoadOrUpdateTextureFromRgba(purplePixels, false, 0, ref boxStartTexture);
+
         }
 
         public override void Dispose()
         {
             debugTexture?.Dispose();
+            boxStartTexture?.Dispose();
             base.Dispose();
         }
 
@@ -117,17 +125,21 @@ namespace vschunkreloader.Client
 
         public override void Render(GuiElementMap mapElem, float dt)
         {
-            // --- dalej Twoje aktualne Render() ---
             if (!Active) return;
 
             GetWorldBoundsForMap(mapElem, out Vec3d worldTopLeft, out Vec3d worldBottomRight);
 
+            // 1. Czerwone – wszystkie zaznaczone chunki
             foreach (var c in clientSystem.selectedChunks)
             {
                 DrawChunkOverlay(mapElem, worldTopLeft, worldBottomRight, c);
             }
 
-            // jeżeli masz podgląd boxa – zostaw
+            // 2. Fiolet – start boxa (po pierwszym kliku w trybie Box)
+            if (selectionMode == ChunkRegenSelectionMode.Box && awaitingBoxEnd)
+            {
+                DrawStartChunkOverlay(mapElem, worldTopLeft, worldBottomRight, boxStartChunk);
+            }
         }
 
 
@@ -157,7 +169,6 @@ namespace vschunkreloader.Client
                 {
                     boxStartChunk = chunk;
                     awaitingBoxEnd = true;
-                    capi.ShowChatMessage($"[ChunkRegen] Box start: ({chunk.X},{chunk.Y})");
                 }
                 else
                 {
@@ -175,12 +186,10 @@ namespace vschunkreloader.Client
                 if (editMode == ChunkRegenEditMode.Add)
                 {
                     clientSystem.selectedChunks.Add(chunk);
-                    capi.ShowChatMessage($"[ChunkRegen] ADD ({chunk.X},{chunk.Y})  total={clientSystem.selectedChunks.Count}");
                 }
                 else if (editMode == ChunkRegenEditMode.Remove)
                 {
                     clientSystem.selectedChunks.Remove(chunk);
-                    capi.ShowChatMessage($"[ChunkRegen] REMOVE ({chunk.X},{chunk.Y})  total={clientSystem.selectedChunks.Count}");
                 }
             }
         }
@@ -211,9 +220,6 @@ namespace vschunkreloader.Client
             }
 
             string op = editMode == ChunkRegenEditMode.Add ? "ADD" : "REMOVE";
-            capi.ShowChatMessage(
-                $"[ChunkRegen] {op} box {maxX - minX + 1} x {maxZ - minZ + 1}. total={clientSystem.selectedChunks.Count}"
-            );
         }
 
         // ============================================================
@@ -277,6 +283,45 @@ namespace vschunkreloader.Client
                 debugTexture.TextureId,
                 (float)px, (float)py, (float)pw, (float)ph,
                 90f
+            );
+        }
+
+        private void DrawStartChunkOverlay(GuiElementMap mapElem, Vec3d worldTopLeft, Vec3d worldBottomRight, Vec2i chunkCoord)
+        {
+            int wx1 = chunkCoord.X * chunkSize;
+            int wz1 = chunkCoord.Y * chunkSize;
+            int wx2 = wx1 + chunkSize;
+            int wz2 = wz1 + chunkSize;
+
+            if (!TryWorldToMapPixel(mapElem, worldTopLeft, worldBottomRight, wx1, wz1, out double x1, out double y1))
+            {
+                return;
+            }
+            if (!TryWorldToMapPixel(mapElem, worldTopLeft, worldBottomRight, wx2, wz2, out double x2, out double y2))
+            {
+                return;
+            }
+
+            double px = x1;
+            double py = y1;
+            double pw = x2 - x1;
+            double ph = y2 - y1;
+
+            if (pw < 0)
+            {
+                px += pw;
+                pw = -pw;
+            }
+            if (ph < 0)
+            {
+                py += ph;
+                ph = -ph;
+            }
+
+            capi.Render.Render2DTexture(
+                boxStartTexture.TextureId,
+                (float)px, (float)py, (float)pw, (float)ph,
+                95f // lekko nad czerwonym (który ma np. 90f)
             );
         }
 

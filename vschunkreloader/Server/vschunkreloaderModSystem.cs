@@ -240,7 +240,6 @@ namespace VsChunkReloader
             };
 
             netChannel.SendPacket(packet);
-            capi.ShowChatMessage($"[ChunkRegen] Regen 1 chunka: ({chunkX}, {chunkZ})");
 
             return true;
         }
@@ -259,12 +258,10 @@ namespace VsChunkReloader
             if (selectedChunks.Contains(c))
             {
                 selectedChunks.Remove(c);
-                capi.ShowChatMessage($"[ChunkRegen] Odznaczono chunk ({chunkX}, {chunkZ}). Zaznaczonych: {selectedChunks.Count}");
             }
             else
             {
                 selectedChunks.Add(c);
-                capi.ShowChatMessage($"[ChunkRegen] Zaznaczono chunk ({chunkX}, {chunkZ}). Zaznaczonych: {selectedChunks.Count}");
             }
 
             return true;
@@ -274,7 +271,6 @@ namespace VsChunkReloader
         {
             if (selectedChunks.Count == 0)
             {
-                capi.ShowChatMessage("[ChunkRegen] Brak zaznaczonych chunków.");
                 return true;
             }
 
@@ -287,7 +283,7 @@ namespace VsChunkReloader
             };
 
             netChannel.SendPacket(packet);
-            capi.ShowChatMessage($"[ChunkRegen] Wysłano {list.Count} chunk(ów) do regeneracji.");
+            capi.ShowChatMessage($"[ChunkRegen] Sent {list.Count} chunks to regenerate.");
 
             // Opcjonalnie wyczyść zaznaczenie po wysłaniu
             selectedChunks.Clear();

@@ -2,13 +2,13 @@
     "$schema": "https://moddbcdn.vintagestory.at/schema/modinfo.latest.json",
     "type": "Code",
     "modid": "vschunkreloader",
-    "name": "vschunkreloader",
+    "name": "VSChunkReloader",
     "authors": [
         "iDex_iDi"
     ],
-    "description": "To be added",
+    "description": "A mod that enables the Player to reload selected chunks if needed (for example if a new chunk generatior is made on a newer version)",
     "version": "1.0.0",
     "dependencies": {
-        "game": "1.21.0"
+        "game": ">=1.21.0 <1.23.0"
     }
 }

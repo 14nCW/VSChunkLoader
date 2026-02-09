@@ -53,13 +53,12 @@ namespace VsChunkReloader
             if (coords == null || coords.Count == 0) return;
 
             var wm = sapi.WorldManager;
-            int chunkSize = wm.ChunkSize;                          // 32
-            int regionChunkSize = wm.RegionSize / chunkSize;       // np. 8
+            int chunkSize = wm.ChunkSize;
+            int regionChunkSize = wm.RegionSize / chunkSize;
             int chunksY = wm.MapSizeY / chunkSize;
 
             HashSet<Vec2i> regions = new HashSet<Vec2i>();
 
-            // 1) Usuń kolumny chunków
             foreach (var c in coords)
             {
                 wm.DeleteChunkColumn(c.X, c.Y);
@@ -80,13 +79,11 @@ namespace VsChunkReloader
                 }
             }
 
-            // 2) Zmuszamy serwer, żeby ponownie wysłał chunki graczowi
             player.CurrentChunkSentRadius = 0;
 
-            // 3) Załaduj ponownie i po wygenerowaniu wyślij dane do klienta
             foreach (var coord in coords)
             {
-                var cLocal = coord; // lokalna kopia dla lambdy
+                var cLocal = coord;
 
                 var opts = new ChunkLoadOptions
                 {
@@ -126,7 +123,6 @@ namespace VsChunkReloader
 
             var mapManager = api.ModLoader.GetModSystem<WorldMapManager>();
 
-            // ✅ prawidłowe wywołanie z dwoma argumentami: layerCode + position
             mapManager.RegisterMapLayer<ChunkRegenOverlayLayer>("chunkreloader", 0.5);
         }
 
@@ -149,16 +145,20 @@ namespace VsChunkReloader
             var packet = new ChunkRegenRequestPacket
             {
                 Coords = list,
-                DeleteRegion = true   // zawsze czyścimy mapę dla regionu
+                DeleteRegion = true
             };
 
             netChannel.SendPacket(packet);
             capi.ShowChatMessage($"[ChunkRegen] Sent {list.Count} chunks to regenerate.");
 
-            // opcjonalnie: czyścić zaznaczenie po wysłaniu
             selectedChunks.Clear();
 
             return true;
+        }
+
+        public void ClearAllSelectedChunks()
+        {
+            selectedChunks.Clear();
         }
     }
 }

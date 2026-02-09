@@ -7,7 +7,6 @@ using VsChunkReloader;
 
 namespace vschunkreloader.Client
 {
-    // tryb edycji – co robimy z chunkami
     public enum ChunkRegenEditMode
     {
         None,
@@ -15,7 +14,6 @@ namespace vschunkreloader.Client
         Remove
     }
 
-    // tryb zaznaczania – jak interpretujemy kliknięcia
     public enum ChunkRegenSelectionMode
     {
         None,
@@ -28,12 +26,12 @@ namespace vschunkreloader.Client
         private readonly ICoreClientAPI capi;
         private readonly IWorldMapManager worldMapManager;
         private readonly ChunkRegenClientSystem clientSystem;
+        private ChunkRegenControlsPanel controlsPanel;
 
-        private LoadedTexture debugTexture;       // czerwony
-        private LoadedTexture boxStartTexture;    // fioletowy
+        private LoadedTexture debugTexture;
+        private LoadedTexture boxStartTexture;
         private int chunkSize = 32;
 
-        // === NOWE POLA STANU ===
         private ChunkRegenEditMode editMode = ChunkRegenEditMode.None;
         private ChunkRegenSelectionMode selectionMode = ChunkRegenSelectionMode.None;
 
@@ -41,29 +39,28 @@ namespace vschunkreloader.Client
         private Vec2i boxStartChunk;
         private Vec2i boxCurrentChunk;
 
-        private ChunkRegenControlsDialog controlsDialog;
+        public ChunkRegenEditMode CurrentEditMode => editMode;
+        public ChunkRegenSelectionMode CurrentSelectionMode => selectionMode;
 
         private bool lastActiveState = false;
-
 
         public override string Title => "chunkreloader";
         public override EnumMapAppSide DataSide => EnumMapAppSide.Client;
         public override string LayerGroupCode => "chunkreloader";
 
-        public ChunkRegenOverlayLayer(ICoreAPI api, IWorldMapManager mapSink)
-            : base(api, mapSink)
+        public ChunkRegenOverlayLayer(ICoreAPI api, IWorldMapManager mapSink) : base(api, mapSink)
         {
-            this.capi = (ICoreClientAPI)api;
-            this.worldMapManager = mapSink;
+            capi = (ICoreClientAPI)api;
+            worldMapManager = mapSink;
 
-            // ModSystem klientowy
-            this.clientSystem = api.ModLoader.GetModSystem<ChunkRegenClientSystem>(true);
+            clientSystem = api.ModLoader.GetModSystem<ChunkRegenClientSystem>(true);
+
+            controlsPanel = new ChunkRegenControlsPanel(capi, this);
 
             debugTexture = new LoadedTexture(capi, 0, 1, 1);
             int[] redPixels = { ColorUtil.ColorFromRgba(255, 0, 0, 120) };
             capi.Render.LoadOrUpdateTextureFromRgba(redPixels, false, 0, ref debugTexture);
 
-            // Fioletowy – start boxa
             boxStartTexture = new LoadedTexture(capi, 0, 1, 1);
             int[] purplePixels = { ColorUtil.ColorFromRgba(180, 0, 255, 180) };
             capi.Render.LoadOrUpdateTextureFromRgba(purplePixels, false, 0, ref boxStartTexture);
@@ -76,67 +73,17 @@ namespace vschunkreloader.Client
             base.Dispose();
         }
 
-        public override void OnMapOpenedClient()
-        {
-            if (controlsDialog == null)
-            {
-                controlsDialog = new ChunkRegenControlsDialog(capi, this);
-            }
-
-            if (!controlsDialog.IsOpened())
-            {
-                controlsDialog.TryOpen();
-            }
-        }
-
-        public override void OnMapClosedClient()
-        {
-            if (controlsDialog != null && controlsDialog.IsOpened())
-            {
-                controlsDialog.TryClose();
-            }
-        }
-
         public override void Render(GuiElementMap mapElem, float dt)
         {
-            if (Active != lastActiveState)
-            {
-                if (Active)
-                {
-                    // warstwa właśnie została WŁĄCZONA - otwieramy GUI
-                    if (controlsDialog == null)
-                    {
-                        controlsDialog = new ChunkRegenControlsDialog(capi, this);
-                    }
-
-                    if (!controlsDialog.IsOpened())
-                    {
-                        controlsDialog.TryOpen();
-                    }
-                }
-                else
-                {
-                    // warstwa została WYŁĄCZONA - zamykamy GUI
-                    if (controlsDialog != null && controlsDialog.IsOpened())
-                    {
-                        controlsDialog.TryClose();
-                    }
-                }
-
-                lastActiveState = Active;
-            }
-
             if (!Active) return;
 
             GetWorldBoundsForMap(mapElem, out Vec3d worldTopLeft, out Vec3d worldBottomRight);
 
-            // 1. Czerwone – wszystkie zaznaczone chunki
             foreach (var c in clientSystem.selectedChunks)
             {
                 DrawChunkOverlay(mapElem, worldTopLeft, worldBottomRight, c);
             }
 
-            // 2. Fiolet – start boxa (po pierwszym kliku w trybie Box)
             if (selectionMode == ChunkRegenSelectionMode.Box && awaitingBoxEnd)
             {
                 DrawStartChunkOverlay(mapElem, worldTopLeft, worldBottomRight, boxStartChunk);
@@ -153,7 +100,6 @@ namespace vschunkreloader.Client
             if (!Active) return;
             if (args.Button != EnumMouseButton.Left) return;
 
-            // dopóki użytkownik nie wybierze trybów – nic się nie dzieje
             if (editMode == ChunkRegenEditMode.None || selectionMode == ChunkRegenSelectionMode.None)
                 return;
 
@@ -163,7 +109,6 @@ namespace vschunkreloader.Client
 
             Vec2i chunk = new Vec2i(worldX >> 5, worldZ >> 5);
 
-            // === BOX MODE: dwa kliknięcia ===
             if (selectionMode == ChunkRegenSelectionMode.Box)
             {
                 if (!awaitingBoxEnd)
@@ -181,7 +126,6 @@ namespace vschunkreloader.Client
                 return;
             }
 
-            // === SINGLE MODE ===
             if (selectionMode == ChunkRegenSelectionMode.Single)
             {
                 if (editMode == ChunkRegenEditMode.Add)
@@ -195,7 +139,6 @@ namespace vschunkreloader.Client
             }
         }
 
-        // prostokąt: dodaj wszystkie chunki z boxStartChunk..boxCurrentChunk
         private void ApplyBoxSelection(Vec2i a, Vec2i b)
         {
             int minX = Math.Min(a.X, b.X);
@@ -322,7 +265,7 @@ namespace vschunkreloader.Client
             capi.Render.Render2DTexture(
                 boxStartTexture.TextureId,
                 (float)px, (float)py, (float)pw, (float)ph,
-                95f // lekko nad czerwonym (który ma np. 90f)
+                95f
             );
         }
 
@@ -373,13 +316,9 @@ namespace vschunkreloader.Client
             );
         }
 
-        public ChunkRegenEditMode CurrentEditMode => editMode;
-        public ChunkRegenSelectionMode CurrentSelectionMode => selectionMode;
-
         public void SetEditMode(ChunkRegenEditMode mode)
         {
             editMode = mode;
-            // przy zmianie trybu edycji kasujemy niedokończonego boxa
             if (selectionMode != ChunkRegenSelectionMode.Box)
             {
                 awaitingBoxEnd = false;
@@ -389,14 +328,12 @@ namespace vschunkreloader.Client
         public void SetSelectionMode(ChunkRegenSelectionMode mode)
         {
             selectionMode = mode;
-            // przy zmianie trybu selekcji kasujemy niedokończonego boxa
             if (selectionMode != ChunkRegenSelectionMode.Box)
             {
                 awaitingBoxEnd = false;
             }
         }
 
-        // będzie wołane z guzika "Execute"
         public void ExecuteSelection()
         {
             if (clientSystem.selectedChunks.Count == 0)
@@ -407,6 +344,26 @@ namespace vschunkreloader.Client
 
             clientSystem.SendChunkReload();
         }
-    }
 
+        public override void ComposeDialogExtras(GuiDialogWorldMap mapDlg, GuiComposer compo)
+        {
+            controlsPanel.Compose(
+                "worldmap-layer-" + this.LayerGroupCode,
+                mapDlg,
+                compo
+            );
+        }
+
+        internal void ClearButtons()
+        {
+            SetSelectionMode(ChunkRegenSelectionMode.None);
+            SetEditMode(ChunkRegenEditMode.None);
+        }
+
+        internal void ClearAll()
+        {
+            ClearButtons();
+            clientSystem.ClearAllSelectedChunks();
+        }
+    }
 }
